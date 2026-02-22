@@ -1,0 +1,17 @@
+# Build output
+*.exe
+*.out
+*.o
+*.obj
+
+# Simulation output
+exercise/result/
+
+# Logs
+*.log
+
+# Editor
+.vscode/
+
+# Temporary
+*.tmp
