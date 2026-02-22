@@ -85,7 +85,6 @@ P_acc += (br*br + bi*bi)
 QPSK 與 16QAM 均產生三組明顯 peak，  
 Verilog 結果與 C++ 結果一致。
 
-（對應 PDF 第 3–8 頁 :contentReference[oaicite:1]{index=1}）
 
 ---
 
@@ -130,7 +129,6 @@ IDLE → LOAD → FFT → OUT → DONE
 - Verilog FFT output 與 C++ 完全一致
 - 演算法順序與 twiddle index 對齊
 
-（對應 PDF 第 9–14 頁 :contentReference[oaicite:2]{index=2}）
 
 ---
 
@@ -151,7 +149,6 @@ IDLE → LOAD → FFT → OUT → DONE
 - 4 bits / symbol
 - 與 C++ 結果一致
 
-（對應 PDF 第 15–16 頁 :contentReference[oaicite:3]{index=3}）
 
 ---
 
@@ -185,7 +182,6 @@ IDLE → LOAD → FFT → OUT → DONE
 - Sequential Autocorrelation 有效控制硬體成本
 - Fixed-point Q8.8 在效能與面積間取得平衡
 
-（對應 PDF 第 17–19 頁 :contentReference[oaicite:4]{index=4}）
 
 ---
 
