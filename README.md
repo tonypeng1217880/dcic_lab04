@@ -1,108 +1,226 @@
-# DCIC HW4 – QPSK / 16QAM 基頻接收器 (RTL)
-
-## 專案簡介
-
-本專案實作一個支援 QPSK 與 16QAM 的基頻接收器 (Baseband Receiver)，
-並以模組化方式設計，使調變無關 (modulation-independent) 與
-調變相關 (modulation-dependent) 模組清楚分離。
-
-整體設計以 Verilog 撰寫，並考慮模組重用性與架構可擴展性。
+# DCIC HW4 – QPSK / 16QAM OFDM Baseband Receiver (RTL)
 
 ---
 
-## 架構設計說明
+## 專案概述
 
-本設計將接收器分為兩大部分：
+本專案實作一套 **OFDM 基頻接收器 (Baseband Receiver)**，  
+支援 **QPSK 與 16QAM** 調變方式，並以 **Verilog RTL** 完成硬體實現。
 
-### 一、共用處理模組（rtl/common）
+本設計重點包含：
 
-此資料夾包含 QPSK 與 16QAM 共同使用的基頻前端處理模組，例如：
-
+- CP-based OFDM Symbol Synchronization
 - 64-point Radix-2 DIT FFT
-- CP (Cyclic Prefix) 同步模組
-- 核心訊號處理流程模組
+- Fixed-point (Q8.8) 設計
+- QPSK / 16QAM Demapper
+- RTL 與 C++ 模型比對驗證
+- 合成與 PPA 分析
 
-設計理念為：
-
-- 將與調變方式無關的訊號處理流程抽離
-- 避免重複撰寫相同前端架構
-- 提升模組重用性
-- 方便未來擴充至更高階調變（例如 64QAM）
+本專案為 C++ 模擬版本的硬體實現版本（Fixed-point Q8.8）。
 
 ---
 
-### 二、調變專屬模組
+# 系統架構
 
-分別位於：
+整體資料流如下：
 
-- rtl/qpsk/
-- rtl/16qam/
-
-此部分實作：
-
-- Demapper 決策邏輯
-- 調變專屬 symbol 判決
-- 對應 top module
-
-設計方式為：
-
-> 共用前端處理流程不變，只替換 demap 階段。
-
-因此 QPSK 與 16QAM 共用同一套 FFT 與同步架構，
-僅在最後符號判決部分不同。
+```
+Input Samples
+    ↓
+CP Autocorrelation Synchronization
+    ↓
+64-point FFT (Radix-2 DIT)
+    ↓
+Demapper (QPSK / 16QAM)
+    ↓
+Output Bitstream
+```
 
 ---
 
-## 專案目錄結構
+# 一、OFDM Symbol Synchronization
+
+## 設計方法
+
+使用 CP-based Autocorrelation：
+
+根據講義公式：
+
+Φ_d 與 P_d 進行三維 summation（d, m, k）
+
+- N = 64
+- CP 長度 = 16
+- 共 3 個 OFDM symbol
+
+---
+
+## 硬體架構特色
+
+✔ 採用 FSM 控制 sequential 累加  
+✔ 不使用大規模 combinational parallel 電路  
+✔ 所有乘法與加法逐拍完成  
+✔ 使用 40-bit accumulator 控制 overflow  
+
+核心計算：
+
+```
+Phi_r += (ar*br + ai*bi)
+Phi_i += (ai*br - ar*bi)
+P_acc += (br*br + bi*bi)
+```
+
+---
+
+## Multi-cycle Divider
+
+- 使用 DesignWare `DW_div_seq`
+- 分子左移 SCALE=16
+- FSM 等待除法完成
+- 輸出 gamma_out 與對應 d_out
+
+---
+
+## 驗證結果
+
+QPSK 與 16QAM 均產生三組明顯 peak，  
+Verilog 結果與 C++ 結果一致。
+
+（對應 PDF 第 3–8 頁 :contentReference[oaicite:1]{index=1}）
+
+---
+
+# 二、64-point FFT 設計
+
+## 演算法
+
+- Radix-2 DIT
+- 共 6 個 stage
+- 記憶體型架構（Memory-based implementation）
+- 行為上等效 R2SDF
+
+---
+
+## 架構組成
+
+- Complex RAM (64 entries)
+- Twiddle ROM (Q8.8)
+- Butterfly Core
+- Address Generator
+- FSM 控制流程
+
+FSM 流程：
+
+```
+IDLE → LOAD → FFT → OUT → DONE
+```
+
+---
+
+## 固定小數點設計
+
+- Twiddle factor: Q8.8
+- 乘法使用 32-bit 暫存
+- 乘積右移 8 bits
+- 控制量化誤差來源一致
+
+---
+
+## 驗證
+
+- Verilog FFT output 與 C++ 完全一致
+- 演算法順序與 twiddle index 對齊
+
+（對應 PDF 第 9–14 頁 :contentReference[oaicite:2]{index=2}）
+
+---
+
+# 三、Demapper 設計
+
+## QPSK Demapper
+
+- 依 Re / Im 正負判斷象限
+- 2 bits / symbol
+- 與 C++ 結果完全一致
+
+---
+
+## 16QAM Demapper
+
+- 設定 threshold T2
+- 四層 decision boundary
+- 4 bits / symbol
+- 與 C++ 結果一致
+
+（對應 PDF 第 15–16 頁 :contentReference[oaicite:3]{index=3}）
+
+---
+
+# 四、合成與 PPA 分析
+
+## QPSK 版本
+
+- Total Area：1,391,364.93
+- Timing：MET
+- Leakage Power：4.644 mW
+- Clock Speed：20 MHz
+- Throughput：10 Mbps
+
+---
+
+## 16QAM 版本
+
+- Total Area：1,395,981.67
+- Timing：MET
+- Leakage Power：4.6378 mW
+- Clock Speed：10 MHz
+- Throughput：40 Mbps
+
+---
+
+## 分析重點
+
+- 兩者前端架構完全共用
+- 面積差異主要來自 Demapper 複雜度
+- FFT 為主要面積來源
+- Sequential Autocorrelation 有效控制硬體成本
+- Fixed-point Q8.8 在效能與面積間取得平衡
+
+（對應 PDF 第 17–19 頁 :contentReference[oaicite:4]{index=4}）
+
+---
+
+# 設計特色
+
+✔ CP-based synchronization FSM 架構  
+✔ Multi-cycle divider 控制  
+✔ Memory-based FFT 設計  
+✔ Twiddle Q8.8 量化控制  
+✔ RTL 與 C++ bit-level 對照驗證  
+✔ Modulation-independent 前端共用設計  
+✔ PPA 分析能力  
+
+---
+
+# 專案目錄結構
 
 ```
 dcic_hw4/
-├── spec/                  # 作業規格
+├── spec/
 ├── exercise/
 │   ├── rtl/
-│   │   ├── common/        # 共用處理模組
-│   │   ├── qpsk/          # QPSK 專屬模組
-│   │   └── 16qam/         # 16QAM 專屬模組
-│   ├── tb/                # 測試平台
-│   └── result/            # 模擬輸出（未納入版本控制）
+│   │   ├── common/
+│   │   ├── qpsk/
+│   │   └── 16qam/
+│   ├── tb/
+│   └── result/
 ├── .gitignore
 └── README.md
 ```
----
-
-## 設計理念
-
-本專案著重於架構層級的模組劃分，而非單純功能實作。
-
-透過：
-
-- 前端處理與 demap 分離
-- 共用模組抽象化
-- 模組化資料夾結構設計
-
-達到：
-
-- 維護性提升
-- 架構清晰
-- 可擴展性高
-- 易於比較不同調變方式之硬體成本
-
----
-
-## 合成與比較
-
-針對 QPSK 與 16QAM 分別進行合成，
-並比較其：
-
-- Area
-- Power
-- 資源使用差異
-
-由於兩者共用相同前端處理架構，
-可清楚觀察不同 demap 複雜度對硬體成本的影響。
 
 ---
 
 ## 作者
 
-彭冠傑
+彭冠傑  
+National Tsing Hua University  
+Digital Communication IC Design
